@@ -25,12 +25,8 @@ import com.netflix.client.config.IClientConfig;
 import com.netflix.loadbalancer.AbstractServerList;
 import com.netflix.loadbalancer.Server;
 import com.netflix.loadbalancer.ServerList;
-import io.fabric8.kubernetes.api.model.EndpointAddress;
-import io.fabric8.kubernetes.api.model.EndpointPort;
-import io.fabric8.kubernetes.api.model.EndpointSubset;
-import io.fabric8.kubernetes.api.model.Endpoints;
+import io.fabric8.kubernetes.api.model.*;
 import io.fabric8.kubernetes.client.KubernetesClient;
-import io.fabric8.kubernetes.client.utils.Utils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -64,40 +60,25 @@ public class KubernetesServerList extends AbstractServerList<Server>
 	}
 
 	public List<Server> getUpdatedListOfServers() {
-		Endpoints endpoints = namespace != null
-				? client.endpoints().inNamespace(namespace).withName(serviceId).get()
-				: client.endpoints().withName(serviceId).get();
+		PodList pods = namespace != null
+				? client.pods().inNamespace(namespace).withLabel("app", serviceId).list()
+				: client.pods().withLabel("app", serviceId).list();
 
-		List<Server> result = new ArrayList<Server>();
-		if (endpoints != null) {
-
+		List<Server> result = new ArrayList<>();
+		if (pods != null) {
 			if (LOG.isDebugEnabled()) {
-				LOG.debug("Found [" + endpoints.getSubsets().size()
-						+ "] endpoints in namespace [" + namespace + "] for name ["
+				LOG.debug("Found [" + pods.getItems().size()
+						+ "] pods in namespace [" + namespace + "] for name ["
 						+ serviceId + "] and portName [" + portName + "]");
 			}
-			for (EndpointSubset subset : endpoints.getSubsets()) {
 
-				if (subset.getPorts().size() == 1) {
-					EndpointPort port = subset.getPorts().get(FIRST);
-					for (EndpointAddress address : subset.getAddresses()) {
-						result.add(new Server(address.getIp(), port.getPort()));
-					}
-				}
-				else {
-					for (EndpointPort port : subset.getPorts()) {
-						if (Utils.isNullOrEmpty(portName)
-								|| portName.endsWith(port.getName())) {
-							for (EndpointAddress address : subset.getAddresses()) {
-								result.add(new Server(address.getIp(), port.getPort()));
-							}
-						}
-					}
-				}
+			for (Pod pod : pods.getItems()) {
+				ObjectMeta metadata = pod.getMetadata();
+				result.add(new KubernetesServer(pod.getStatus().getPodIP(), pod.getSpec().getContainers().get(0).getPorts().get(0).getContainerPort()).setLabels(metadata.getLabels()));
 			}
 		}
 		else {
-			LOG.warn("Did not find any endpoints in ribbon in namespace [" + namespace
+			LOG.warn("Did not find any pods in ribbon in namespace [" + namespace
 					+ "] for name [" + serviceId + "] and portName [" + portName + "]");
 		}
 		return result;
