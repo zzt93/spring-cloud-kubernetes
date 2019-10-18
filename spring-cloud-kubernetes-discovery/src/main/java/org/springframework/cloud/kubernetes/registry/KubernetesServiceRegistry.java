@@ -17,20 +17,41 @@
 
 package org.springframework.cloud.kubernetes.registry;
 
+import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.cloud.client.serviceregistry.ServiceRegistry;
+import org.springframework.cloud.kubernetes.discovery.KubernetesDiscoveryProperties;
+
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 
 public class KubernetesServiceRegistry implements ServiceRegistry<KubernetesRegistration> {
 
 	private static final Log log = LogFactory.getLog(KubernetesServiceRegistry.class);
+	private final KubernetesClient client;
+	private final KubernetesDiscoveryProperties properties;
 
-	public KubernetesServiceRegistry() {
+	public KubernetesServiceRegistry(KubernetesClient client, KubernetesDiscoveryProperties properties) {
+		this.client = client;
+		this.properties = properties;
 	}
 
 	@Override
 	public void register(KubernetesRegistration registration) {
 		log.info("Registering : " + registration);
+
+		if (!properties.getServiceLabels().isEmpty()) {
+			try {
+				client.pods().withName(InetAddress.getLocalHost().getHostName())
+					.edit()
+					.editMetadata().addToLabels(properties.getServiceLabels())
+					.and().done();
+			} catch (KubernetesClientException|UnknownHostException e) {
+				log.warn("Unable to add labels to pod", e);
+			}
+		}
 	}
 
 	@Override

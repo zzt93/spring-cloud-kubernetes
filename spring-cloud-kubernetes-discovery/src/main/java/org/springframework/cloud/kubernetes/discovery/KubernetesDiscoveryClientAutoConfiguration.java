@@ -60,8 +60,9 @@ public class KubernetesDiscoveryClientAutoConfiguration {
 	}
 
 	@Bean
-	public KubernetesServiceRegistry getServiceRegistry() {
-		return new KubernetesServiceRegistry();
+	public KubernetesServiceRegistry getServiceRegistry(KubernetesClient client,
+												  KubernetesDiscoveryProperties properties) {
+		return new KubernetesServiceRegistry(client, properties);
 	}
 
 	@Bean
